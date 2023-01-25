@@ -1,4 +1,4 @@
-# Implementing SegPGD
+# Implementing IAA on SegPGD
 
 
 ### 1. Prediction
