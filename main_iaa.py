@@ -30,48 +30,19 @@ from differential_color_functions import rgb2lab_diff, ciede2000_diff
 import torchfcn
 import pytorch_ssim
 
-from torchsummary import summary
-
-# from cf.Caffe2Pytorch.caffe2pth.caffenet import *
-
-# modelpr50 = network.modeling.__dict__["deeplabv3plus_resnet50"](num_classes=21, output_stride=16)
-# modelpr50.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_resnet50_voc_os16.pth")['model_state'])
-# modelpr50.eval().to("cuda")
-
-modelr50 = network.modeling.__dict__["deeplabv3_resnet50"](num_classes=21, output_stride=16)
-modelr50.load_state_dict( torch.load( "checkpoints/best_deeplabv3_resnet50_voc_os16.pth")['model_state'])
-
-modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
-modelpr101.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
-
-modelr50city = network.modeling.__dict__["deeplabv3_resnet50"](num_classes=19, output_stride=16)
-modelr50city.load_state_dict( torch.load( "checkpoints/best_deeplabv3_resnet50_cityscapes_os16.pth")['model_state'])
-
-modelpr101city = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=19, output_stride=16)
-modelpr101city.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_resnet101_cityscapes_os16.pth")['model_state'])
-
-
-modelpmobcity = network.modeling.__dict__["deeplabv3plus_mobilenet"](num_classes=19, output_stride=16)
-modelpmobcity.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_mobilenet_cityscapes_os16.pth")['model_state'])
-
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# modelr50.to(device)
-# print(summary(modelr50))
-
-# modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
-# modelpr101.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
-# modelpr101.eval().to("cuda")
-
-# modelfcn8s = torchfcn.models.FCN8s(n_class=21)
-# fcn16s = torchfcn.models.FCN16s(n_class=21)
-# state_dict = torchfcn.models.FCN16s.download()
-# fcn16s.load_state_dict(torch.load(state_dict))
-# modelfcn8s.copy_params_from_fcn16s(fcn16s)
+modelpr50_iaa = network.modeling.__dict__["deeplabv3plus_resnet50"](num_classes=21, output_stride=16)
+modelpr50_iaa.load_state_dict( torch.load( "checkpoints_wp/best_deeplabv3plus_resnet50_voc_os16.pth")['model_state'])
 
 modelfcn8s = torchfcn.models.FCN8s(n_class=21)
 modelfcn8s.load_state_dict(torch.load( "pretrained/FCN/checkpoint.pth.tar")['model_state_dict'])
 
+modelpr101_iaa = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
+modelpr101_iaa.load_state_dict( torch.load( "checkpoints_iaa/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
+# modelpr50.eval().to("cuda")
 
+# modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
+# modelpr101.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
+# modelpr101.eval().to("cuda")
 
 # modelpm = network.modeling.__dict__["deeplabv3plus_mobilenet"](num_classes=21, output_stride=16)
 # modelpm.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_mobilenet_voc_os16.pth")['model_state'])
@@ -154,89 +125,50 @@ def get_argparser():
                         help='number of samples for visualization (default: 8)')
 
     # optimization options
-    parser.add_argument("--decays", type=List[int], default=[0.9829, 0.8942, 0.8746, 0.9969],
-                        help='decays (default: [1.0, 0.85, 0.65, 0.15])')
-    parser.add_argument("--beta_value", type=float, default=37.0,
-                        help='beta_value (default: 25.0)')
+    parser.add_argument("--decays", type=List[int], default=[1.0, 0.85, 0.65, 0.15],
+                        help='decays (default: [1.0, 0.85, 0.65, 0.15]0.9829, 0.8942, 0.8746, 0.9969) ')
+    parser.add_argument("--beta_value", type=float, default=25.0,
+                        help='beta_value (default: 25.0)37')
     parser.add_argument("--bayesian_opt",action="store_true",default=False)
 
 
     return parser
 
 
-# def transform(self, img, lbl):
-#     img = img[:, :, ::-1]  # RGB -> BGR
-#     img = img.astype(np.float64)
-#     img -= self.mean_bgr
-#     img = img.transpose(2, 0, 1)
-#     img = torch.from_numpy(img).float()
-#     lbl = torch.from_numpy(lbl).long()
-#     return img, lbl
-
-# def untransform(img):
-#     # img = img.numpy()
-#     # img = img.transpose(1, 2, 0)
-#     img += np.array([104.00698793, 116.66876762, 122.67891434])
-#     img = img.astype(np.uint8)
-#     img = img[:, :, ::-1]
-#     return img
-
 def get_dataset(opts):
     """ Dataset And Augmentation
     """
-
-
-    # def transform(self, img, lbl):
-    #     img = img[:, :, ::-1]  # RGB -> BGR
-    #     img = img.astype(np.float64)
-    #     img -= self.mean_bgr
-    #     img = img.transpose(2, 0, 1)
-    #     img = torch.from_numpy(img).float()
-    #     lbl = torch.from_numpy(lbl).long()
-    #     return img, lbl
-
-    # def untransform(self, img, lbl):
-    #     img = img.numpy()
-    #     img = img.transpose(1, 2, 0)
-    #     img += self.mean_bgr
-    #     img = img.astype(np.uint8)
-    #     img = img[:, :, ::-1]
-    #     lbl = lbl.numpy()
-    #     return img, lbl  
-
     if opts.dataset == 'voc':
         train_transform = et.ExtCompose([
             # et.ExtResize(size=opts.crop_size),
             et.ExtRandomScale((0.5, 2.0)),
             et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size), pad_if_needed=True),
             et.ExtRandomHorizontalFlip(),
+            # et.ExtToTensor(),
             et.ExtToTensor_FCN(),
-            # et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-            #                 std=[0.229, 0.224, 0.225]),
+            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
         ])
         if opts.crop_val:
             val_transform = et.ExtCompose([
                 et.ExtResize(opts.crop_size),
                 et.ExtCenterCrop(opts.crop_size),
-                # et.ExtRandomCrop(size=(opts.crop_size,opts.crop_size)),
-                et.ExtToTensor_FCN(),
-                # et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                #                 std=[0.229, 0.224, 0.225]),
+                et.ExtToTensor(),
+                # et.ExtToTensor_FCN(),
+                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
             ])
         else:
-            # fcn here
             val_transform = et.ExtCompose([
-                et.ExtToTensor_FCN(),
-                # et.ExtToTensor(),
-                # et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                #                 std=[0.229, 0.224, 0.225]),
+                et.ExtToTensor(),
+                # et.ExtToTensor_FCN(),
+                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
             ])
-  
         train_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
                                     image_set='train', download=opts.download, transform=train_transform)
         val_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
                                   image_set='val', download=False, transform=val_transform)
-
 
     if opts.dataset == 'cityscapes':
         train_transform = et.ExtCompose([
@@ -244,27 +176,17 @@ def get_dataset(opts):
             et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
             et.ExtColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
             et.ExtRandomHorizontalFlip(),
-            et.ExtToTensor_FCN(),
-            # et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-            #                 std=[0.229, 0.224, 0.225]),
+            et.ExtToTensor(),
+            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
         ])
 
         val_transform = et.ExtCompose([
             # et.ExtResize( 512 ),
-            # et.ExtResize(opts.crop_size),
-            # et.ExtCenterCrop(size=(opts.crop_size, opts.crop_size)),
-            # 
-            # et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
-            # et.ExtScale(0.8),
-            # et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
-            et.ExtToTensor_FCN(),
-            # et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            # std=[0.229, 0.224, 0.225]),
+            et.ExtToTensor(),
+            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
         ])
-
-
-
-
 
         train_dst = Cityscapes(root=opts.data_root,
                                split='train', transform=train_transform)
@@ -276,10 +198,8 @@ def get_dataset(opts):
 # def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None):
     """Do validation and return specified samples"""
-    denorm = utils.Denormalize_FCN(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
+    model.eval().to(device)    
     model1.eval().to(device)
-    model.eval().to(device)
     metrics.reset()
     # metrics_1.reset()
     ret_samples = []
@@ -288,24 +208,18 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
 
     def get_PSNR(imagea, imageb):
         mse = np.mean((imagea - imageb) ** 2)
-        # print(mse)
         if(mse == 0): 
             return 100
         max_pixel = 255.0
         psnr = 20 * math.log(max_pixel / math.sqrt(mse),10)
-        # print( max_pixel / math.sqrt(mse))
         return psnr
 
     if opts.save_val_results:
         if not os.path.exists('results'):
             os.mkdir('results')
-        # denorm = utils.Denormalize_FCN(mean=[0.485, 0.456, 0.406],
-        #                            std=[0.229, 0.224, 0.225])
-        # denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406],
-        #                            std=[0.229, 0.224, 0.225])
-        # denorm = untransform
+        denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406],
+                                   std=[0.229, 0.224, 0.225])
         img_id = 0
-
 # =============================================================================
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 # =============================================================================
@@ -313,14 +227,7 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
     with torch.no_grad():
         torch.set_grad_enabled(True) 
         for i, (images, labels) in tqdm(enumerate(loader)):
-            # print(images.shape)
-            # img = images.cpu().detach().numpy()[:, :, ::-1]  # RGB -> BGR
-            # img = img.astype(np.float64)
-            # # print(img.shape)
-            # # img -= np.array([104.00698793, 116.66876762, 122.67891434])
-            # images = img.transpose(2, 0, 1)
             images = images.to(device, dtype=torch.float32)
-            # print()
             
 #            images.requires_grad = True
          
@@ -329,11 +236,10 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             new_images=Variable(images, requires_grad=True)
             
             new_labels=Variable(labels, requires_grad=False)
-            # print(new_images)
-            new_images = new_images.to(torch.device("cuda") )
-            
+
             outputs = model(new_images)
-            # print(outputs)
+            # [batchsize,class,d1,d2]
+            # [batchsize,d1,d2]
 #            criterion = utils.FocalLoss(ignore_index=255, size_average=True)
 
             # torch.Size([4, 513, 513])    
@@ -396,27 +302,15 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             # TODO turn to label not 15
             # TODO turn to label 0
             # adversarial_x = attacks.fgsm(images, new_images, 0.005)
-            # adversarial_x = attacks.fgsm(images, new_images, 0.03)
-            # adversarial_x = attacks.fgsm(images, new_images, 0)
-            # adversarial_x = attacks.fgsm(images, new_images, 8)
+            # adversarial_x = attacks.fgsm(images, new_images, 0.0)
             # adversarial_x = images
+            # adversarial_x = attacks.fgsm(images, new_images, 0.03)
             #
             # adversarial_x = attacks.t_fgsm_2(images, new_images, 4/255)
-            # adversarial_x = attacks.DI(images,new_images,new_labels,8,model)
-            # adversarial_x = attacks.TI(images,new_images,new_labels,8,model)
-            # adversarial_x = attacks.NI(images,new_images,new_labels,8,model)
-
-            adversarial_x = attacks.es_NI_DI_TI(images,new_images,new_labels,8,model)
-
+            # adversarial_x = attacks.segpgd(images,new_images,new_labels,0.1,model)
             # too small, what the hell is going on?
-            # adversarial_x = attacks.fgsm(images, new_images, 0)
-            # adversarial_x = attacks.segpgd(images,new_images,new_labels,8,model)
-            # print()
-            # adversarial_x = attacks.DAGp(images,new_images,new_labels,8,model,outputs)
-            # adversarial_x = attacks.DAG(images,new_images,new_labels,8,model)
-            # print(adversarial_x)
-            # adversarial_x = attacks.pgd(images,new_images,new_labels,8,model)
-            
+            adversarial_x = attacks.pgd(images,new_images,new_labels,0.03,model)
+            #
             # print(adversarial_x[1,1,:,:][2][100])
             # plt.imshow(adversarial_x[1,1,:,:].cpu())
             # plt.show()
@@ -447,43 +341,35 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
 
             # new_loss = IAA.IAA_score(model,images)
             # print(new_loss.item())
-            # # https://github.com/ZhengyuZhao/PerC-Adversarial
-            # # d_map=ciede2000_diff(rgb2lab_diff(new_images,device),rgb2lab_diff(adversarial_x,device),device).unsqueeze(1)
-            # d_map=ciede2000_diff(rgb2lab_diff(new_images,device),rgb2lab_diff(adversarial_x,device),device)
-            # # print(d_map)
+            
+            # d_map=ciede2000_diff(rgb2lab_diff(new_images,device),rgb2lab_diff(adversarial_x,device),device).unsqueeze(1)
             # # print(type(d_map))
-            # # print(d_map.shape)
             # # print(new_images.shape)
             # ud_color_dis=(torch.nan_to_num(d_map.cpu())).view(new_images.shape[0],-1)
-            # # ud_color_dis=((d_map.cpu())).view(new_images.shape[0],-1)
-            # # print(ud_color_dis.shape)
-            # # ud_color_dis=(d_map.cpu()).view(new_images.shape[0],-1)
             # color_dis = torch.norm(ud_color_dis,dim=0)
-            # # print(color_dis)
-            # color_loss=color_dis.sum()
-            # # color_loss=color_dis.sum()/(new_images.shape[2]*new_images.shape[3]*new_images.shape[0]*new_images.shape[1])
-            # # color_loss=color_dis.mean()
-            # # print(color_loss)
+            # color_loss=color_dis.sum()/(new_images.shape[2]*new_images.shape[3]*new_images.shape[0]*new_images.shape[1])
             # delta_E.append(color_loss.detach().cpu())
-            # # print(new_images.squeeze(0).shape)
+            delta_E.append(pytorch_ssim.ssim(new_images*255,adversarial_x*255).cpu().detach())
+            PSNR.append(get_PSNR((new_images*255).cpu().detach().numpy(),(adversarial_x*255).cpu().detach().numpy())/new_images.shape[0])
 
-            delta_E.append(pytorch_ssim.ssim(new_images,adversarial_x).cpu().detach())
-            #denorm maybe
-
-            PSNR.append(get_PSNR(new_images.cpu().detach().numpy(),adversarial_x.cpu().detach().numpy())/new_images.shape[0])
             # PSNR.append(get_PSNR(new_images.cpu().detach().numpy(),adversarial_x.cpu().detach().numpy())/new_images.shape[0])
-            # PSNR.append(get_PSNR(denorm(new_images.squeeze(0).cpu().detach().numpy()),denorm(adversarial_x.squeeze(0).cpu().detach().numpy()))/new_images.shape[0])
             # print(PSNR)
             # print(color_loss)
             
             ## check!!!
+            # adversarial_x = adversarial_x.permute(0,2,3,1).detach().cpu().numpy()
+            # # print(adversarial_x.shape)
+            # # adversarial_x = (adversarial_x[:,::-1,:, :]) *255 # RGB -> BGR
+
+            # adversarial_x = (adversarial_x[:, :, :,::-1])*255  # RGB -> BGR
+            # adversarial_x -= np.array([104.00698793, 116.66876762, 122.67891434])
+            # # adversarial_x = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
+            # adversarial_x = torch.from_numpy(adversarial_x).permute(0,3,1,2).to(device)
+
             # new_output = model(adversarial_x)
             new_output = model1(adversarial_x)
-            # print(new_output[0,:,0,0])
-            # new_output[:,0]=-9.99999
+             
             preds = new_output.detach().max(dim=1)[1].cpu().numpy()
-            # preds = new_output.detach().argmax(dim=1).cpu().numpy()
-            # print(preds)
 # =============================================================================
 #            preds = outputs.detach().max(dim=1)[1].cpu().numpy()
             targets = labels.cpu().numpy()
@@ -506,19 +392,14 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
                     
 #                    adversarial_img_y =  adversarial_y[i].detach().cpu().numpy()
 
-#                     image = (denorm(image) * 255).transpose(1, 2, 0).astype(np.uint8)
-# # =============================================================================
-#                     adversarial_img = (denorm(adversarial_img) * 255).transpose(1, 2, 0).astype(np.uint8)
-# # =============================================================================
-                    
-                    image = (denorm(image) ).transpose(1, 2, 0).astype(np.uint8)
+                    image = (denorm(image) * 255).transpose(1, 2, 0).astype(np.uint8)
 # =============================================================================
-                    adversarial_img = (denorm(adversarial_img) ).transpose(1, 2, 0).astype(np.uint8)
-
+                    adversarial_img = (denorm(adversarial_img) * 255).transpose(1, 2, 0).astype(np.uint8)
+# =============================================================================
+                    
 #                    adversarial_img_y = (denorm(adversarial_img_y) * 255).transpose(1, 2, 0).astype(np.uint8)
                     
                     target = loader.dataset.decode_target(target).astype(np.uint8)
-                    # print(pred)
                     pred = loader.dataset.decode_target(pred).astype(np.uint8)
 
                     Image.fromarray(image).save('results/%d_image.png' % img_id)
@@ -528,7 +409,6 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
 #                    Image.fromarray(adversarial_img_y).save('results/%d_atyimage.png' % img_id)
 
                     Image.fromarray(target).save('results/%d_target.png' % img_id)
-                    # print(pred)
                     Image.fromarray(pred).save('results/%d_pred.png' % img_id)
 
                     fig = plt.figure()
@@ -541,9 +421,10 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
                     plt.savefig('results/%d_overlay.png' % img_id, bbox_inches='tight', pad_inches=0)
                     plt.close()
                     img_id += 1
-        delta_E = sum(delta_E)/len(delta_E)    
+       
         PSNR = sum(PSNR)/len(PSNR)    
         print(PSNR)
+        delta_E = sum(delta_E)/len(delta_E)    
         print(delta_E.item())
         score = metrics.get_results()    
 
@@ -558,7 +439,7 @@ def main():
         opts.num_classes = 21
     elif opts.dataset.lower() == 'cityscapes':
         opts.num_classes = 19
-    print("here")
+
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
                      env=opts.vis_env) if opts.enable_vis else None
@@ -567,7 +448,6 @@ def main():
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
     print("Device: %s" % device)
 
     # Setup random seed
@@ -589,62 +469,209 @@ def main():
           (opts.dataset, len(train_dst), len(val_dst)))
 
     # Set up model (all models are 'constructed at network.modeling)
+    # model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride,decays = opts.decays,beta_value = opts.beta_value)
+    # model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride,decays = opts.decays,beta_value = opts.beta_value)
+    
+    # model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)
+    # print(train_dst[:,:].size())
 
 
-    model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)   
+    # print(train_dst[0][1].size())
+    # [513,513]
+    # print(train_dst[0][0].size())
+    # [3,513,513]
+    if opts.bayesian_opt:
+        from bayes_opt import BayesianOptimization
+        from sklearn.model_selection import cross_val_score
+        # from skopt import BayesSearchCV
+        # def resnet101_cv(decays,beta_value):
+        x = []
+        y = []
+        for i in range(len(train_dst)):
+            x.append(train_dst[i][0])
+            y.append(train_dst[i][1])
+            # if i >= 2:
+            #     break
+        # x = np.array(x, dtype="object")
+        # y = np.array(y, dtype="object")
+        # print(x.dtypes )
+        # x = torch.from_numpy(x.astype(float))
+        # y = torch.from_numpy(y.astype(float))
+        # x= torch.tensor([item.cpu().detach().numpy() for item in x]).cuda() 
+        # y= torch.tensor([item.cpu().detach().numpy() for item in y]).cuda() 
+        # x = torch.tensor(x)
+        # y = torch.tensor(y)
+        x = torch.stack(x)
+        y = torch.stack(y)
+        # this is costy
+        # x = x.to(device, dtype=torch.float32)
+        # y = y.to(device, dtype=torch.long)
+        # this is costy
+
+        # x_m = train_dst[:][0]
+        # y_m = train_dst[:][1]
+        # def resnet101_cv(beta_value):
+        #     res = cross_val_score( 
+        #         network.modeling.__dict__[opts.model](num_classes=opts.num_classes, 
+        #             output_stride=opts.output_stride,
+        #             decays = opts.decays,
+        #             beta_value = int(beta_value)
+        #             ),
+            
+        #     # x = [images for (images,_) in train_loader], y = [labels for (_,labels)in train_loader]
+        #     x,y
+        #     ).mean()
+        #     return res
+        # def black_box_function(beta_value,decays):
+        # def black_box_function(beta_value=25,l1=1,l2=0.85,l3=0.65,l4=0.15):
+        def black_box_function(beta_value,l1,l2,l3,l4):
+        # def black_box_function(l4,l3=0.875,l2=0.894,l1=0.983,beta_value=37.1):
+            model = network.modeling.__dict__["deeplabv3plus_resnet50"](num_classes=opts.num_classes, 
+                    output_stride = opts.output_stride,
+                    # decays = List[int](decays),
+                    decays = [l1,l2,l3,l4],
+                    # beta_value = int(beta_value)
+                    beta_value = int(beta_value))
+            model.load_state_dict( torch.load( "checkpoints_wp/best_deeplabv3plus_resnet50_voc_os16.pth")['model_state'])
+            # model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, 
+            #         output_stride = opts.output_stride,
+            #         # decays = List[int](decays),
+            #         decays = opts.decays,
+            #         # beta_value = int(beta_value)
+            #         beta_value = int(beta_value)
+            #         )
+            # y_r = model(x)
+            model.eval().to(device)
+            # f = IAA.IAA_score(model,x).cpu().detach().numpy()
+            # criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+            # f = criterion(model(x),y).cpu().detach().numpy()
+            return 1
+        # resnet101_opt = BayesianOptimization(
+        #     resnet101_cv,
+        #     {
+        #         # 'decays':(0,1),
+        #      'beta_value':(0,1)
+        #     }
+
+        resnet_opt = BayesianOptimization(
+            black_box_function,
+            # {'beta_value':(5,45)}    
+            # 'decays':(0,1),
+            {
+                'beta_value':(5,45),
+                # ,
+            # ,
+            #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+            'l1':(0.001,0.999),
+            # ,
+            'l2':(0.001,0.999),
+            # ,
+            'l3':(0.001,0.999),
+            'l4':(0.001,0.999)
+            },
+
+            random_state = 1
+        )
+        # resnet_opt = BayesSearchCV(
+        #     black_box_function,
+        #     # {'beta_value':(5,45)}    
+        #     # 'decays':(0,1),
+        #     {'beta_value':(5,45),
+        #     #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+        #     'l1':(0.001,0.999),
+        #     'l2':(0.001,0.999),
+        #     'l3':(0.001,0.999),
+        #     'l4':(0.001,0.999)
+        #     },
+        #     random_state = 0
+        
+        # )
+        # resnet_opt.fit(x)
+        # print(resnet_opt.getparams)
+        # print(resnet_opt.score(x))
+        # resnet101_opt.maximize(n_iter=500)
+        resnet_opt.probe(
+            # params={'beta_value':20,
+            # #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+            # 'l1':0.98,
+            # 'l2':0.87,
+            # 'l3':0.73,
+            # 'l4':0.19
+            # },
+            # params={'beta_value':25,
+            # #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+            # 'l1':0.999,
+            # 'l2':0.85,
+            # 'l3':0.65,
+            # 'l4':0.15
+            # },
+            params={
+            #     'beta_value':37.1, 
+            # # ,
+            # #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+            # 'l1':0.983, 
+            # # # ,
+            # 'l2':0.894,
+            # 'l3':0.8745,
+            # 'l4': 0.997
+            'beta_value':20,
+            #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+            'l1':0.98,
+            'l2':0.87,
+            'l3':0.73,
+            'l4':0.19
+            
+            },
+            lazy=True
+
+
+        )
+        resnet_opt.maximize(n_iter=500)
+        # resnet101_opt.explore({'beta_value':20,
+        #     #  'decays':[(0.001,0.999),(0.001,0.999),(0.001,0.999),(0.001,0.999)]
+        #     'l1':0.98,
+        #     'l2':0.87,
+        #     'l3':0.73,
+        #     'l4':0.19},
+        # n_iter=500)
+        print(resnet_opt.max["params"])
+        print(resnet_opt.max["target"])
+        # print(resnet_opt.fun)
+        # print(resnet_opt.x)
+
+        # print(resnet101_opt.res)
+        # if opts.model == 'deeplabv3plus_resnet50' or opts.model == 'deeplabv3plus_resnet101':
+        #     model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride,
+        #             # decays = List[int](decays),
+        #             decays = opts.decays,
+        #             # beta_value = int(beta_value)
+        #             beta_value = opts.beta_value)
+        # else:
+            # model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)
+    else:
+        if opts.model == 'deeplabv3plus_resnet50' or opts.model == 'deeplabv3plus_resnet101':
+            model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride,
+                    # decays = List[int](decays),
+                    decays = opts.decays,
+                    # beta_value = int(beta_value)
+                    beta_value = opts.beta_value)
+        else:
+            model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)   
     if opts.separable_conv and 'plus' in opts.model:
         network.convert_to_separable_conv(model.classifier)
-    # model = modelfcn8s
-    # utils.set_bn_momentum(model, momentum=0.01)
     utils.set_bn_momentum(model.backbone, momentum=0.01)
 
     # Set up metrics
     metrics = StreamSegMetrics(opts.num_classes)
+    # metrics_1 = StreamSegMetrics(opts.num_classes)
+    # metrics_2 = StreamSegMetrics(opts.num_classes)
+    # metrics_3 = StreamSegMetrics(opts.num_classes)
 
     # Set up optimizer
     optimizer = torch.optim.SGD(params=[
         {'params': model.backbone.parameters(), 'lr': 0.1 * opts.lr},
         {'params': model.classifier.parameters(), 'lr': opts.lr},
     ], lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
-
-    # def get_parameters(model, bias=False):
-    #     import torch.nn as nn
-    #     modules_skipped = (
-    #         nn.ReLU,
-    #         nn.MaxPool2d,
-    #         nn.Dropout2d,
-    #         nn.Sequential,
-    #         torchfcn.models.FCN32s,
-    #         torchfcn.models.FCN16s,
-    #         torchfcn.models.FCN8s,
-    #     )
-    #     for m in model.modules():
-    #         if isinstance(m, nn.Conv2d):
-    #             if bias:
-    #                 yield m.bias
-    #             else:
-    #                 yield m.weight
-    #         elif isinstance(m, nn.ConvTranspose2d):
-    #             # weight is frozen because it is just a bilinear upsampling
-    #             if bias:
-    #                 assert m.bias is None
-    #         elif isinstance(m, modules_skipped):
-    #             continue
-    #         else:
-    #             raise ValueError('Unexpected module: %s' % str(m))
-    # optimizer = torch.optim.SGD(
-    #     [
-    #         {'params': get_parameters(model, bias=False)},
-    #         {'params': get_parameters(model, bias=True),
-    #          'lr': opts.lr * 2, 'weight_decay': 0},
-    #     ],
-    #     lr=opts.lr,
-    #     momentum=0.9,
-    #     weight_decay=opts.weight_decay)
-
-
-
-
     # optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
     # torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.lr_decay_step, gamma=opts.lr_decay_factor)
     if opts.lr_policy == 'poly':
@@ -677,11 +704,10 @@ def main():
     cur_itrs = 0
     cur_epochs = 0
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
-        print("yesssssssssss")
         # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint["model_state"])
-        # model = nn.DataParallel(model)
+        model = nn.DataParallel(model)
         model.to(device)
         if opts.continue_training:
             optimizer.load_state_dict(checkpoint["optimizer_state"])
@@ -693,28 +719,24 @@ def main():
         del checkpoint  # free memory
     else:
         print("[!] Retrain")
-        # model = nn.DataParallel(model)
+        model = nn.DataParallel(model)
         model.to(device)
 
     # ==========   Train Loop   ==========#
     vis_sample_id = np.random.randint(0, len(val_loader), opts.vis_num_samples,
                                       np.int32) if opts.enable_vis else None  # sample idxs for visualization
-    # denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
-
-    denorm = utils.Denormalize_FCN(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
+    denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
 
     if opts.test_only:
-        # model = modelpr101city
-        # model = modelr50city
-        # model = modelpmobcity
-        # model = modelfcn8s
-        # model = modelpr101
-        # model = modelr50
+        model.eval()
+        model=modelpr50_iaa
+        # model=modelpr101_iaa
+        # model=modelfcn8s
         # model.eval()
         # val_score, ret_samples = validate(
         #     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         val_score, ret_samples = validate(
-            opts=opts, model=modelpmobcity,model1=modelpmobcity, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
+            opts=opts, model=modelpr50_iaa,model1=modelpr50_iaa, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         print(metrics.to_str(val_score))
         # print(metrics_1.to_str(val_score))
         return
@@ -728,7 +750,7 @@ def main():
 # =============================================================================
 #         #s
 #         torch.set_grad_enabled(True) 
-        #e
+#         #e
 # =============================================================================
         for (images, labels) in train_loader:
             cur_itrs += 1
@@ -792,13 +814,7 @@ def main():
             optimizer.step()
 
             np_loss = loss.detach().cpu().numpy()
-            # if  math.isnan(np_loss):
-            #     print("6")
-            #     continue
-            # else:
-            #     print("7")
             interval_loss += np_loss
-
             if vis is not None:
                 vis.vis_scalar('Loss', cur_itrs, np_loss)
 
@@ -809,7 +825,7 @@ def main():
                 interval_loss = 0.0
 
             if (cur_itrs) % opts.val_interval == 0:
-                save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
+                save_ckpt('checkpoints_iaa/latest_%s_%s_os%d.pth' %
                           (opts.model, opts.dataset, opts.output_stride))
                 print("validation...")
                 model.eval()
@@ -823,7 +839,7 @@ def main():
                 # print(metrics_1.to_str(val_score_1))
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
-                    save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
+                    save_ckpt('checkpoints_iaa/best_%s_%s_os%d.pth' %
                               (opts.model, opts.dataset, opts.output_stride))
 
                 if vis is not None:  # visualize validation score and samples
