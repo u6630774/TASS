@@ -62,10 +62,10 @@ Extract SegmentationClassAug to the VOC2012.
 
 ### 3. Training on Pascal VOC2012 Aug
 
-```
 #### 3.1 Training
 Run main.py with *"--year 2012_aug"* to train the model on Pascal VOC2012 Aug.
 Parallel training on 2 GPUs with '--gpu_id 0,1'
+
 ```bash
 python main.py --model deeplabv3_resnet50  --gpu_id 0 --year 2012_aug --crop_val --lr 0.01 --crop_size 513 --batch_size 16 --output_stride 16
 ```

@@ -1,10 +1,14 @@
-from visdom import Visdom
-import json 
+try:
+    from visdom import Visdom
+except ImportError:
+    Visdom = None
 
 class Visualizer(object):
     """ Visualizer
     """
     def __init__(self, port='13579', env='main', id=None):
+        if Visdom is None:
+            raise ImportError("visdom is required when visualization is enabled. Install it with `pip install visdom`.")
         #self.cur_win = {}
         self.vis = Visdom(port=port, env=env)
         self.id = id
