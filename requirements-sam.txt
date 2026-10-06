@@ -1,0 +1,6 @@
+# Optional dependencies for sam_attack.py and its integration tests.
+torch>=1.13
+torchvision>=0.14
+numpy
+pillow
+git+https://github.com/facebookresearch/segment-anything.git@dca509fe793f601edb92606367a655c15ac00fdf
