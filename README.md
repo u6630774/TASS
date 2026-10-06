@@ -2,6 +2,89 @@
 
 This is a fold online for the "Transferable Attack for Semantic Segmentation" implementation.
 
+## SAM attacks without annotated masks
+
+`sam_attack.py` supplies the SAM adapter and label-free objective discussed in
+[issue #1](https://github.com/u6630774/TASS/issues/1). It is a new implementation
+of the clean-prediction pseudo-label protocol, informed by the PAVFM method.
+The original SAM experiment script is unavailable, so this addition does not
+claim to reproduce the historical paper figures or establish their exact loss.
+
+For one clean RGB image `x` and a fixed point/box prompt `P`, the source SAM
+produces continuous mask logits `z_clean`. We fix the binary pseudo-label
+`y = (z_clean > 0).detach()` once, then **maximize**
+`binary_cross_entropy_with_logits(z_adv, y)` while perturbing the image.
+No annotated segmentation mask or semantic class label is required. For logits
+`z`, this BCE is equivalent to two-class cross entropy with logits `[0, z]`.
+SAM's multiple candidate masks are alternative object masks, not class logits;
+this implementation consistently requests the single-mask output.
+
+Both `ni` and `ni_di_ti` optimize that pseudo-label objective. The latter combines
+Nesterov momentum, resize/pad input diversity, and Gaussian gradient smoothing.
+When applying input diversity, we transform the prompts and pseudo-label mask
+with the image and exclude added padding from the loss. This SAM path uses
+RGB pixels in `[0, 1]`, projects each update onto the specified L-infinity budget,
+and keeps the output in `[0, 1]`. Its preprocessing and projection are separate
+from the legacy FCN/BGR attacks in `attacks.py`.
+
+The differentiable path calls SAM's image encoder, prompt encoder, and mask
+decoder directly and uses continuous logits for the loss. SAM's public
+`Sam.forward` / `SamPredictor` inference methods disable gradients, so calling
+them directly inside a gradient attack would not work. Point labels `0/1`
+describe background/foreground prompt points; they are not dense mask labels.
+
+### Install and run
+
+Install the optional dependencies and download the appropriate checkpoint from
+the [official SAM repository](https://github.com/facebookresearch/segment-anything#model-checkpoints):
+
+```bash
+pip install -r requirements-sam.txt
+
+# Coordinates refer to the original image: X Y foreground/background label.
+python sam_attack.py --image samples/1_image.png \
+  --checkpoint checkpoints/sam_vit_b_01ec64.pth --model vit_b \
+  --point 200 200 1 --attack ni --epsilon 12 --iterations 16 \
+  --output results/sam_ni
+
+# Use the same image, prompts, budget, and iterations for the method comparison.
+python sam_attack.py --image samples/1_image.png \
+  --checkpoint checkpoints/sam_vit_b_01ec64.pth --model vit_b \
+  --point 200 200 1 --attack ni_di_ti --epsilon 12 --iterations 16 \
+  --output results/sam_ensemble
+```
+
+Replace the example point with a point inside your object. Repeat `--point` for
+additional points, or use `--box X0 Y0 X1 Y1`. `--epsilon 12` means `12/255` on
+normalized pixels. The defaults are ViT-B, NI, 12 pixel units, and 16 iterations.
+`--device` defaults to CUDA when available and otherwise CPU. Checkpoint files
+are not downloaded automatically. For transfer evaluation, append, for example:
+
+```bash
+--target vit_l=checkpoints/sam_vit_l_0b3195.pth \
+--target vit_h=checkpoints/sam_vit_h_4b8939.pth
+```
+
+Only the source model contributes optimization gradients and pseudo-labels.
+Transfer targets are evaluated sequentially on the same saved adversarial image
+and prompts. The output includes `adversarial.png`, clean/adversarial binary
+masks, and `metrics.json` with the protocol, prompts, checkpoints, budget,
+iteration count, seed, BCE values, and mask agreement IoU. Metrics are computed
+after 8-bit quantization; the saved image's maximum pixel change is checked.
+Agreement IoU compares each model's own clean and attacked masks, not a human
+ground-truth mask. A low IoU indicates changed predictions; the untargeted
+objective can expand or suppress masks and does not guarantee object removal.
+
+The CPU tests include a small randomly initialized model assembled from the
+official SAM modules. They check the input-gradient path and inference agreement,
+fixed pseudo-labels, loss ascent, perturbation bounds, aligned input diversity,
+and saved-image/transfer reporting. They do not establish attack effectiveness
+or ViT-B-to-L/H transfer with pretrained checkpoints.
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ### 1. Prediction
 
 ```
