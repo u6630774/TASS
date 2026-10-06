@@ -17,27 +17,48 @@ import torch
 import torch.nn as nn
 from utils.visualizer import Visualizer
 
-from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
 
-from torch.autograd import Variable
 import IAA
 
-from typing import Type, Any, Callable, Union, List, Optional
-from differential_color_functions import rgb2lab_diff, ciede2000_diff
+try:
+    import pytorch_ssim
+except ImportError:
+    pytorch_ssim = None
 
-import torchfcn
-import pytorch_ssim
 
-modelpr50_iaa = network.modeling.__dict__["deeplabv3plus_resnet50"](num_classes=21, output_stride=16)
-modelpr50_iaa.load_state_dict( torch.load( "checkpoints_wp/best_deeplabv3plus_resnet50_voc_os16.pth")['model_state'])
+def parse_float_list(value):
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
 
-modelfcn8s = torchfcn.models.FCN8s(n_class=21)
-modelfcn8s.load_state_dict(torch.load( "pretrained/FCN/checkpoint.pth.tar")['model_state_dict'])
 
-modelpr101_iaa = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
-modelpr101_iaa.load_state_dict( torch.load( "checkpoints_iaa/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
+def generate_adversarial(opts, images, new_images, new_labels, model, outputs=None):
+    attack = opts.attack.lower()
+    eps = opts.attack_epsilon
+    num_iter = opts.attack_iters
+    if attack == "none":
+        return images
+    if attack == "fgsm":
+        return attacks.fgsm(images, new_images, eps)
+    if attack == "pgd":
+        return attacks.pgd(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "segpgd":
+        return attacks.segpgd(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "dag":
+        return attacks.DAG(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "ni":
+        return attacks.NI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "di":
+        return attacks.DI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "ti":
+        return attacks.TI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack in {"ni_di_ti", "es_ni_di_ti"}:
+        return attacks.es_NI_DI_TI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    raise ValueError("Unsupported attack: %s" % opts.attack)
+
+
 # modelpr50.eval().to("cuda")
 
 # modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
@@ -76,7 +97,7 @@ def get_argparser():
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=30e3,
+    parser.add_argument("--total_itrs", type=int, default=30000,
                         help="epoch number (default: 30k)")
     parser.add_argument("--lr", type=float, default=0.01,
                         help="learning rate (default: 0.01)")
@@ -125,11 +146,18 @@ def get_argparser():
                         help='number of samples for visualization (default: 8)')
 
     # optimization options
-    parser.add_argument("--decays", type=List[int], default=[1.0, 0.85, 0.65, 0.15],
-                        help='decays (default: [1.0, 0.85, 0.65, 0.15]0.9829, 0.8942, 0.8746, 0.9969) ')
+    parser.add_argument("--decays", type=parse_float_list, default=[1.0, 0.85, 0.65, 0.15],
+                        help='decays for IAA residual refinement')
     parser.add_argument("--beta_value", type=float, default=25.0,
-                        help='beta_value (default: 25.0)37')
+                        help='beta value for IAA SoftPlus refinement')
     parser.add_argument("--bayesian_opt",action="store_true",default=False)
+    parser.add_argument("--attack", type=str, default="pgd",
+                        choices=["none", "fgsm", "pgd", "segpgd", "dag", "ni", "di", "ti", "ni_di_ti"],
+                        help="adversarial attack used during validation/testing")
+    parser.add_argument("--attack_epsilon", type=float, default=0.03,
+                        help="attack budget in the normalized input scale")
+    parser.add_argument("--attack_iters", type=int, default=10,
+                        help="number of iterations for iterative attacks")
 
 
     return parser
@@ -224,8 +252,7 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 # =============================================================================
 
-    with torch.no_grad():
-        torch.set_grad_enabled(True) 
+    with torch.enable_grad():
         for i, (images, labels) in tqdm(enumerate(loader)):
             images = images.to(device, dtype=torch.float32)
             
@@ -233,9 +260,8 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
          
 #            torch.autograd.grad(images, create_graph=True, allow_unused=True)
             labels = labels.to(device, dtype=torch.long)
-            new_images=Variable(images, requires_grad=True)
-            
-            new_labels=Variable(labels, requires_grad=False)
+            new_images = images.detach().requires_grad_(True)
+            new_labels = labels.detach()
 
             outputs = model(new_images)
             # [batchsize,class,d1,d2]
@@ -309,7 +335,7 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             # adversarial_x = attacks.t_fgsm_2(images, new_images, 4/255)
             # adversarial_x = attacks.segpgd(images,new_images,new_labels,0.1,model)
             # too small, what the hell is going on?
-            adversarial_x = attacks.pgd(images,new_images,new_labels,0.03,model)
+            adversarial_x = generate_adversarial(opts, images, new_images, new_labels, model, outputs)
             #
             # print(adversarial_x[1,1,:,:][2][100])
             # plt.imshow(adversarial_x[1,1,:,:].cpu())
@@ -349,7 +375,8 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             # color_dis = torch.norm(ud_color_dis,dim=0)
             # color_loss=color_dis.sum()/(new_images.shape[2]*new_images.shape[3]*new_images.shape[0]*new_images.shape[1])
             # delta_E.append(color_loss.detach().cpu())
-            delta_E.append(pytorch_ssim.ssim(new_images*255,adversarial_x*255).cpu().detach())
+            if pytorch_ssim is not None:
+                delta_E.append(pytorch_ssim.ssim(new_images*255,adversarial_x*255).cpu().detach())
             PSNR.append(get_PSNR((new_images*255).cpu().detach().numpy(),(adversarial_x*255).cpu().detach().numpy())/new_images.shape[0])
 
             # PSNR.append(get_PSNR(new_images.cpu().detach().numpy(),adversarial_x.cpu().detach().numpy())/new_images.shape[0])
@@ -422,10 +449,11 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
                     plt.close()
                     img_id += 1
        
-        PSNR = sum(PSNR)/len(PSNR)    
+        PSNR = sum(PSNR)/len(PSNR)
         print(PSNR)
-        delta_E = sum(delta_E)/len(delta_E)    
-        print(delta_E.item())
+        delta_E = sum(delta_E)/len(delta_E) if delta_E else None
+        if delta_E is not None:
+            print(delta_E.item())
         score = metrics.get_results()    
 
         # score_1 = metrics_1.get_results()
@@ -686,12 +714,15 @@ def main():
     elif opts.loss_type == 'cross_entropy':
         criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 
+    def model_state_dict(model):
+        return model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict()
+
     def save_ckpt(path):
         """ save current model
         """
         torch.save({
             "cur_itrs": cur_itrs,
-            "model_state": model.module.state_dict(),
+            "model_state": model_state_dict(model),
             "optimizer_state": optimizer.state_dict(),
             "scheduler_state": scheduler.state_dict(),
             "best_score": best_score,
@@ -729,14 +760,11 @@ def main():
 
     if opts.test_only:
         model.eval()
-        model=modelpr50_iaa
-        # model=modelpr101_iaa
-        # model=modelfcn8s
         # model.eval()
         # val_score, ret_samples = validate(
         #     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         val_score, ret_samples = validate(
-            opts=opts, model=modelpr50_iaa,model1=modelpr50_iaa, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
+            opts=opts, model=model, model1=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         print(metrics.to_str(val_score))
         # print(metrics_1.to_str(val_score))
         return

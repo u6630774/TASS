@@ -23,6 +23,18 @@ class Denormalize(object):
             return (tensor - self._mean.reshape(-1,1,1)) / self._std.reshape(-1,1,1)
         return normalize(tensor, self._mean, self._std)
 
+
+class Denormalize_FCN(object):
+    """Reverse FCN-style BGR preprocessing and return an RGB image array/tensor."""
+
+    def __init__(self, mean=None, std=None):
+        self.mean_bgr = np.array([104.00698793, 116.66876762, 122.67891434], dtype=np.float32)
+
+    def __call__(self, tensor):
+        image = tensor + self.mean_bgr.reshape(-1, 1, 1)
+        return image[::-1, :, :]
+
+
 def set_bn_momentum(model, momentum=0.1):
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):

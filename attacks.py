@@ -13,6 +13,22 @@ __credits__ = ['Anurag Arnab', 'Ondrej Miksik', 'Philip Torr']
 __email__ = 'anurag.arnab@gmail.com'
 __license__ = 'MIT'
 
+
+FCN_MEAN_BGR = (104.00698793, 116.66876762, 122.67891434)
+
+
+def clamp_fcn_image(image):
+    """Clamp FCN/BGR-preprocessed tensors without assuming a CUDA device."""
+    mean = image.new_tensor(FCN_MEAN_BGR)
+    min_value = -mean
+    max_value = 255 - mean
+    return torch.max(torch.min(image, max_value), min_value)
+
+
+def gaussian_kernel_like(kernel, reference):
+    return torch.from_numpy(kernel).to(device=reference.device, dtype=reference.dtype)
+
+
 def fgsm(images,new_images,eps):
     r"""Caffe implementation of the Fast Gradient Sign Method.
     This attack was proposed in
@@ -42,16 +58,13 @@ def fgsm(images,new_images,eps):
     # image = torch.clamp(image,min=-torch.tensor([0.0171, 0.0175, 0.0176]).cuda(),max= 1-torch.tensor([0.0171, 0.0175, 0.0176]).cuda())
     # adversarial_x = image.permute(0,3,1, 2)   
 
-    image = adversarial_x.permute(0,2,3,1)
-    image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-    adversarial_x = image.permute(0,3,1,2)    
-    return adversarial_x
+    return clamp_fcn_image(adversarial_x.permute(0,2,3,1)).permute(0,3,1,2)
 
 
-def pgd(image,new_images,new_labels,eps,model):
+def pgd(image,new_images,new_labels,eps,model, num_iter=10):
     
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
-    Total_iterations = 10
+    Total_iterations = num_iter
     ieps = eps / Total_iterations
     for i in range(Total_iterations):
             new_images_d = new_images.detach()
@@ -68,9 +81,7 @@ def pgd(image,new_images,new_labels,eps,model):
             # adversarial_x = torch.clamp(image,  new_images - eps*1,  new_images + eps*1)
             # print(image.shape)
 
-            image = image.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3,1,2)
+            image = clamp_fcn_image(image.permute(0,2,3,1)).permute(0,3,1,2)
             new_images = image
             
             # print()
@@ -82,10 +93,10 @@ def pgd(image,new_images,new_labels,eps,model):
 
 
 
-def NI(image,new_images,new_labels,eps,model):
+def NI(image,new_images,new_labels,eps,model, num_iter=10):
     
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
-    Total_iterations = 10
+    Total_iterations = num_iter
     ieps = eps / Total_iterations
     grad_last = 0
     new_images_d = new_images.detach()
@@ -111,9 +122,7 @@ def NI(image,new_images,new_labels,eps,model):
             # img = torch.where(img < image - eps, image - eps, img)
             # adversarial_x = torch.clamp(img,  image - eps*1,  image + eps*1)
 
-            image = img.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3,1,2)
+            image = clamp_fcn_image(img.permute(0,2,3,1)).permute(0,3,1,2)
             
             # temp = image.cpu().numpy()
             # adversarial_x = torch.clamp(adversarial_x, max=np.amax([np.amax(temp[:,:,0]), np.amax(temp[:,:,1]), np.amax(temp[:,:,2])]), min=np.amin([np.amin(temp[:,:,0]), np.amin(temp()[:,:,1]), np.amin(temp[:,:,2])]))
@@ -122,11 +131,11 @@ def NI(image,new_images,new_labels,eps,model):
             # img = FCNadversarial_x
     return image
 
-def DI(image,new_images,new_labels,eps,model):
+def DI(image,new_images,new_labels,eps,model, num_iter=10):
 #https://github.com/ZhengyuZhao/TransferAttackEval/blob/main/attacks/input_augmentation_attacks.py
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
     # criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='sum')
-    Total_iterations = 10
+    Total_iterations = num_iter
     ieps = eps / Total_iterations
     def DI(X_in, in_size_h, out_size_h,in_size_w, out_size_w):
         # new_size= out_size+2
@@ -190,17 +199,15 @@ def DI(image,new_images,new_labels,eps,model):
             # adversarial_x = torch.clamp(image,  new_images - eps*1,  new_images + eps*1)
             # print(image.shape)
 
-            image = image.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3,1,2)
+            image = clamp_fcn_image(image.permute(0,2,3,1)).permute(0,3,1,2)
             new_images = image
 
     return image
 
-def es_NI_DI_TI(image,new_images,new_labels,eps,model):
+def es_NI_DI_TI(image,new_images,new_labels,eps,model, num_iter=10):
     
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
-    Total_iterations = 10
+    Total_iterations = num_iter
     ieps = eps / Total_iterations
     grad_last = 0
     new_images_d = new_images.detach()
@@ -232,7 +239,7 @@ def es_NI_DI_TI(image,new_images,new_labels,eps,model):
         kernel = gkern(kernel_size, 3).astype(np.float32)
         gaussian_kernel = np.stack([kernel, kernel, kernel])
         gaussian_kernel = np.expand_dims(gaussian_kernel, 1)
-        gaussian_kernel = torch.from_numpy(gaussian_kernel).cuda() 
+        gaussian_kernel = gaussian_kernel_like(gaussian_kernel, grad_in)
            
         grad_out = F.conv2d(grad_in, gaussian_kernel, bias=None, stride=(1), padding=(int((kernel_size-1)/2),int((kernel_size-1)/2)), groups=3) #TI
         return grad_out
@@ -255,17 +262,15 @@ def es_NI_DI_TI(image,new_images,new_labels,eps,model):
             new_images_d.grad.zero_()
             img = img.detach().data + ieps * torch.sign(in_grad)
 
-            image = img.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3,1,2)
+            image = clamp_fcn_image(img.permute(0,2,3,1)).permute(0,3,1,2)
             new_images = image
 
     return image
 
-def segpgd(image,new_images,new_labels,eps,model):
+def segpgd(image,new_images,new_labels,eps,model, num_iter=10):
    
    criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
-   Total_iterations = 10
+   Total_iterations = num_iter
    ieps = eps / Total_iterations
    for i in range(Total_iterations):
            new_images = new_images.detach()
@@ -301,9 +306,7 @@ def segpgd(image,new_images,new_labels,eps,model):
            image = image.detach() + ieps * torch.sign(grad.detach())
         #    adversarial_x = torch.min(torch.max(image, new_images - eps*1), new_images + eps*1)
         #    adversarial_x = torch.clamp(image,  new_images - eps*1,  new_images + eps*1)
-           image = image.permute(0,2,3,1)
-           image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-           image = image.permute(0,3,1,2)    
+           image = clamp_fcn_image(image.permute(0,2,3,1)).permute(0,3,1,2)    
            new_images = image  
    return image
 # 
@@ -362,7 +365,7 @@ def t_fgsm_2(images,new_images,eps):
     # Return the perturbed image
     return adversarial_x
 
-def TI(image,new_images,new_labels,eps,model):
+def TI(image,new_images,new_labels,eps,model, num_iter=10):
     # https://github.com/ZhengyuZhao/TransferAttackEval/blob/a527b69a88e19aec6f5f77e6d9dfe89c703359d6/attacks/input_augmentation_attacks.py#L11
     import scipy.stats as st
     def gkern(kernlen=5, nsig=3):
@@ -375,7 +378,7 @@ def TI(image,new_images,new_labels,eps,model):
         kernel = gkern(kernel_size, 3).astype(np.float32)
         gaussian_kernel = np.stack([kernel, kernel, kernel])
         gaussian_kernel = np.expand_dims(gaussian_kernel, 1)
-        gaussian_kernel = torch.from_numpy(gaussian_kernel).cuda() 
+        gaussian_kernel = gaussian_kernel_like(gaussian_kernel, grad_in)
            
         grad_out = F.conv2d(grad_in, gaussian_kernel, bias=None, stride=(1), padding=(int((kernel_size-1)/2),int((kernel_size-1)/2)), groups=3) #TI
         return grad_out
@@ -383,7 +386,7 @@ def TI(image,new_images,new_labels,eps,model):
 
 
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
-    Total_iterations = 10
+    Total_iterations = num_iter
     ieps = eps / Total_iterations
     for i in range(Total_iterations):
             new_images_d = new_images.detach()
@@ -396,9 +399,7 @@ def TI(image,new_images,new_labels,eps,model):
             # adversarial_x = torch.min(torch.max(image, new_images - eps*1), new_images + eps*1)
             # adversarial_x = torch.clamp(image,  new_images - eps*1,  new_images + eps*1)
             # print(image.shape)
-            image = image.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3, 1, 2)
+            image = clamp_fcn_image(image.permute(0,2,3,1)).permute(0,3, 1, 2)
             new_images=image
             # print()
     # print(image.min())
@@ -407,7 +408,7 @@ def TI(image,new_images,new_labels,eps,model):
     # print(new_images_d.max())
     return image    
 
-def DAG(image,new_images,new_labels,eps,model):
+def DAG(image,new_images,new_labels,eps,model, num_iter=10):
     if new_images.shape[1]==19:
         fake_labels =new_labels+np.random.randint(1,18)
         fake_labels[fake_labels== 19]=0
@@ -466,7 +467,7 @@ def DAG(image,new_images,new_labels,eps,model):
     # print(fake_labels.max())
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
     # max_iterations=200
-    max_iterations=10
+    max_iterations=num_iter
     # max_iterations=200
     ieps=eps/max_iterations
     # r=torch.zeros_like
@@ -514,9 +515,7 @@ def DAG(image,new_images,new_labels,eps,model):
             # new_images = new_images.detach() + ieps*torch.sign(drm.detach())
             # new_images = new_images.detach() + drm.detach().unsqueeze(-1).unsqueeze(-1)
 
-            new_images = new_images.permute(0,2,3,1)
-            new_images = torch.clamp(new_images,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            new_images = new_images.permute(0,3, 1, 2)
+            new_images = clamp_fcn_image(new_images.permute(0,2,3,1)).permute(0,3, 1, 2)
             # print(torch.nonzero(logits.argmax(dim=1)==new_labels) )
             if torch.count_nonzero(logits.argmax(dim=1)==new_labels) ==0:
                 break
@@ -529,7 +528,7 @@ def DAG(image,new_images,new_labels,eps,model):
     image= image+r
     return image
 
-def DAGp(image,new_images,new_labels,eps,model,outputs):
+def DAGp(image,new_images,new_labels,eps,model,outputs, num_iter=10):
     # print(new_labels.shape)
     if outputs.shape[1]==19:
         fake_labels =new_labels+np.random.randint(1,18)
@@ -584,7 +583,7 @@ def DAGp(image,new_images,new_labels,eps,model,outputs):
     # print(fake_labels.max())
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
     # max_iterations=200
-    max_iterations=10
+    max_iterations=num_iter
     # max_iterations=200
     ieps=eps/max_iterations
     # r=torch.zeros_like
@@ -632,9 +631,7 @@ def DAGp(image,new_images,new_labels,eps,model,outputs):
             # new_images = new_images.detach() + ieps*torch.sign(drm.detach())
             # new_images = new_images.detach() + drm.detach().unsqueeze(-1).unsqueeze(-1)
 
-            image = new_images.permute(0,2,3,1)
-            image = torch.clamp(image,min=-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda(),max= 255-torch.tensor([104.00698793, 116.66876762, 122.67891434]).cuda())
-            image = image.permute(0,3,1, 2)
+            image = clamp_fcn_image(new_images.permute(0,2,3,1)).permute(0,3,1, 2)
             # print(torch.nonzero(logits.argmax(dim=1)==new_labels) )
             if torch.count_nonzero(logits.argmax(dim=1)==new_labels) ==0:
                 break

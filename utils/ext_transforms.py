@@ -1,4 +1,4 @@
-import collections
+import collections.abc
 import torchvision
 import torch
 import torchvision.transforms.functional as F
@@ -11,31 +11,6 @@ from PIL import Image
 #
 #  Extended Transforms for Semantic Segmentation
 #
-class ExtRandomHorizontalFlip(object):
-    """Horizontally flip the given PIL Image randomly with a given probability.
-    Args:
-        p (float): probability of the image being flipped. Default value is 0.5
-    """
-
-    def __init__(self, p=0.5):
-        self.p = p
-
-    def __call__(self, img, lbl):
-        """
-        Args:
-            img (PIL Image): Image to be flipped.
-        Returns:
-            PIL Image: Randomly flipped image.
-        """
-        if random.random() < self.p:
-            return F.hflip(img), F.hflip(lbl)
-        return img, lbl
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(p={})'.format(self.p)
-
-
-
 class ExtCompose(object):
     """Composes several transforms together.
     Args:
@@ -295,6 +270,25 @@ class ExtToTensor(object):
     def __repr__(self):
         return self.__class__.__name__ + '()'
 
+
+class ExtToTensor_FCN(object):
+    """Convert RGB PIL images to FCN-style BGR tensors with ImageNet mean removed."""
+
+    mean_bgr = np.array([104.00698793, 116.66876762, 122.67891434], dtype=np.float32)
+
+    def __init__(self, target_type='uint8'):
+        self.target_type = target_type
+
+    def __call__(self, pic, lbl):
+        image = np.array(pic, dtype=np.float32)[:, :, ::-1]
+        image -= self.mean_bgr
+        image = image.transpose(2, 0, 1)
+        target = np.array(lbl, dtype=self.target_type)
+        return torch.from_numpy(image), torch.from_numpy(target)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+
 class ExtNormalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels, this transform
@@ -409,7 +403,7 @@ class ExtResize(object):
     """
 
     def __init__(self, size, interpolation=Image.BILINEAR):
-        assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
+        assert isinstance(size, int) or (isinstance(size, collections.abc.Iterable) and len(size) == 2)
         self.size = size
         self.interpolation = interpolation
 

@@ -17,67 +17,45 @@ import torch
 import torch.nn as nn
 from utils.visualizer import Visualizer
 
-from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
 
-from torch.autograd import Variable
-import IAA
-
-from typing import Type, Any, Callable, Union, List, Optional
-from differential_color_functions import rgb2lab_diff, ciede2000_diff
-
-import torchfcn
-import pytorch_ssim
-
-from torchsummary import summary
-
-# from cf.Caffe2Pytorch.caffe2pth.caffenet import *
-
-# modelpr50 = network.modeling.__dict__["deeplabv3plus_resnet50"](num_classes=21, output_stride=16)
-# modelpr50.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_resnet50_voc_os16.pth")['model_state'])
-# modelpr50.eval().to("cuda")
-
-modelr50 = network.modeling.__dict__["deeplabv3_resnet50"](num_classes=21, output_stride=16)
-modelr50.load_state_dict( torch.load( "checkpoints/best_deeplabv3_resnet50_voc_os16.pth")['model_state'])
-
-modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
-modelpr101.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
-
-modelr50city = network.modeling.__dict__["deeplabv3_resnet50"](num_classes=19, output_stride=16)
-modelr50city.load_state_dict( torch.load( "checkpoints/best_deeplabv3_resnet50_cityscapes_os16.pth")['model_state'])
-
-modelpr101city = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=19, output_stride=16)
-modelpr101city.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_resnet101_cityscapes_os16.pth")['model_state'])
+try:
+    import pytorch_ssim
+except ImportError:
+    pytorch_ssim = None
 
 
-modelpmobcity = network.modeling.__dict__["deeplabv3plus_mobilenet"](num_classes=19, output_stride=16)
-modelpmobcity.load_state_dict( torch.load( "checkpoints/best_deeplabv3plus_mobilenet_cityscapes_os16.pth")['model_state'])
-
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# modelr50.to(device)
-# print(summary(modelr50))
-
-# modelpr101 = network.modeling.__dict__["deeplabv3plus_resnet101"](num_classes=21, output_stride=16)
-# modelpr101.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_resnet101_voc_os16.pth")['model_state'])
-# modelpr101.eval().to("cuda")
-
-# modelfcn8s = torchfcn.models.FCN8s(n_class=21)
-# fcn16s = torchfcn.models.FCN16s(n_class=21)
-# state_dict = torchfcn.models.FCN16s.download()
-# fcn16s.load_state_dict(torch.load(state_dict))
-# modelfcn8s.copy_params_from_fcn16s(fcn16s)
-
-modelfcn8s = torchfcn.models.FCN8s(n_class=21)
-modelfcn8s.load_state_dict(torch.load( "pretrained/FCN/checkpoint.pth.tar")['model_state_dict'])
+def parse_float_list(value):
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def generate_adversarial(opts, images, new_images, new_labels, model, outputs=None):
+    attack = opts.attack.lower()
+    eps = opts.attack_epsilon
+    num_iter = opts.attack_iters
+    if attack == "none":
+        return images
+    if attack == "fgsm":
+        return attacks.fgsm(images, new_images, eps)
+    if attack == "pgd":
+        return attacks.pgd(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "segpgd":
+        return attacks.segpgd(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "dag":
+        return attacks.DAG(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "ni":
+        return attacks.NI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "di":
+        return attacks.DI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack == "ti":
+        return attacks.TI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    if attack in {"ni_di_ti", "es_ni_di_ti"}:
+        return attacks.es_NI_DI_TI(images, new_images, new_labels, eps, model, num_iter=num_iter)
+    raise ValueError("Unsupported attack: %s" % opts.attack)
 
-# modelpm = network.modeling.__dict__["deeplabv3plus_mobilenet"](num_classes=21, output_stride=16)
-# modelpm.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_mobilenet_voc_os16.pth")['model_state'])
-
-# modelpx = network.modeling.__dict__["deeplabv3plus_xception"](num_classes=21, output_stride=16)
-# modelpx.load_state_dict( torch.load( "pretrained/best_deeplabv3plus_xception_voc_os16.pth")['model_state'])
 
 def get_argparser():
     parser = argparse.ArgumentParser()
@@ -105,7 +83,7 @@ def get_argparser():
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=30e3,
+    parser.add_argument("--total_itrs", type=int, default=30000,
                         help="epoch number (default: 30k)")
     parser.add_argument("--lr", type=float, default=0.01,
                         help="learning rate (default: 0.01)")
@@ -154,11 +132,18 @@ def get_argparser():
                         help='number of samples for visualization (default: 8)')
 
     # optimization options
-    parser.add_argument("--decays", type=List[int], default=[0.9829, 0.8942, 0.8746, 0.9969],
+    parser.add_argument("--decays", type=parse_float_list, default=[0.9829, 0.8942, 0.8746, 0.9969],
                         help='decays (default: [1.0, 0.85, 0.65, 0.15])')
     parser.add_argument("--beta_value", type=float, default=37.0,
                         help='beta_value (default: 25.0)')
     parser.add_argument("--bayesian_opt",action="store_true",default=False)
+    parser.add_argument("--attack", type=str, default="ni_di_ti",
+                        choices=["none", "fgsm", "pgd", "segpgd", "dag", "ni", "di", "ti", "ni_di_ti"],
+                        help="adversarial attack used during validation/testing")
+    parser.add_argument("--attack_epsilon", type=float, default=8.0,
+                        help="attack budget in the current input scale; FCN preprocessing uses BGR 0-255")
+    parser.add_argument("--attack_iters", type=int, default=10,
+                        help="number of iterations for iterative attacks")
 
 
     return parser
@@ -310,8 +295,7 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
     criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 # =============================================================================
 
-    with torch.no_grad():
-        torch.set_grad_enabled(True) 
+    with torch.enable_grad():
         for i, (images, labels) in tqdm(enumerate(loader)):
             # print(images.shape)
             # img = images.cpu().detach().numpy()[:, :, ::-1]  # RGB -> BGR
@@ -326,11 +310,10 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
          
 #            torch.autograd.grad(images, create_graph=True, allow_unused=True)
             labels = labels.to(device, dtype=torch.long)
-            new_images=Variable(images, requires_grad=True)
-            
-            new_labels=Variable(labels, requires_grad=False)
+            new_images = images.detach().requires_grad_(True)
+            new_labels = labels.detach()
             # print(new_images)
-            new_images = new_images.to(torch.device("cuda") )
+            new_images = new_images.to(device)
             
             outputs = model(new_images)
             # print(outputs)
@@ -406,7 +389,7 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             # adversarial_x = attacks.TI(images,new_images,new_labels,8,model)
             # adversarial_x = attacks.NI(images,new_images,new_labels,8,model)
 
-            adversarial_x = attacks.es_NI_DI_TI(images,new_images,new_labels,8,model)
+            adversarial_x = generate_adversarial(opts, images, new_images, new_labels, model, outputs)
 
             # too small, what the hell is going on?
             # adversarial_x = attacks.fgsm(images, new_images, 0)
@@ -467,7 +450,8 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
             # delta_E.append(color_loss.detach().cpu())
             # # print(new_images.squeeze(0).shape)
 
-            delta_E.append(pytorch_ssim.ssim(new_images,adversarial_x).cpu().detach())
+            if pytorch_ssim is not None:
+                delta_E.append(pytorch_ssim.ssim(new_images,adversarial_x).cpu().detach())
             #denorm maybe
 
             PSNR.append(get_PSNR(new_images.cpu().detach().numpy(),adversarial_x.cpu().detach().numpy())/new_images.shape[0])
@@ -541,10 +525,11 @@ def validate(opts, model, model1, loader, device, metrics, ret_samples_ids=None)
                     plt.savefig('results/%d_overlay.png' % img_id, bbox_inches='tight', pad_inches=0)
                     plt.close()
                     img_id += 1
-        delta_E = sum(delta_E)/len(delta_E)    
-        PSNR = sum(PSNR)/len(PSNR)    
+        delta_E = sum(delta_E)/len(delta_E) if delta_E else None
+        PSNR = sum(PSNR)/len(PSNR)
         print(PSNR)
-        print(delta_E.item())
+        if delta_E is not None:
+            print(delta_E.item())
         score = metrics.get_results()    
 
         # score_1 = metrics_1.get_results()
@@ -659,12 +644,15 @@ def main():
     elif opts.loss_type == 'cross_entropy':
         criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
 
+    def model_state_dict(model):
+        return model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict()
+
     def save_ckpt(path):
         """ save current model
         """
         torch.save({
             "cur_itrs": cur_itrs,
-            "model_state": model.module.state_dict(),
+            "model_state": model_state_dict(model),
             "optimizer_state": optimizer.state_dict(),
             "scheduler_state": scheduler.state_dict(),
             "best_score": best_score,
@@ -714,7 +702,7 @@ def main():
         # val_score, ret_samples = validate(
         #     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         val_score, ret_samples = validate(
-            opts=opts, model=modelpmobcity,model1=modelpmobcity, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
+            opts=opts, model=model, model1=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
         print(metrics.to_str(val_score))
         # print(metrics_1.to_str(val_score))
         return
